@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StudyTrack Pro - Smart Study Tracking with Spaced Repetition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(99, 102, 241, 0.5); }
+            50% { box-shadow: 0 0 40px rgba(99, 102, 241, 0.8); }
+        }
+        .glow-effect { animation: pulse-glow 2s infinite; }
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 min-h-screen text-white">
+    <div id="app" class="container mx-auto px-4 py-8">
+        <!-- Loading State -->
+        <div id="loading" class="flex items-center justify-center h-screen">
+            <div class="text-center">
+                <div class="w-16 h-16 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                <p>Loading StudyTrack Pro...</p>
+            </div>
+        </div>
+
+        <!-- Auth Section -->
+        <div id="auth" class="hidden">
+            <div class="max-w-md mx-auto mt-20 glass-effect rounded-xl p-8">
+                <h1 class="text-4xl font-bold text-center mb-8">🦉 StudyTrack Pro</h1>
+                <p class="text-center mb-6 text-gray-300">Stay on track, every day.</p>
+                
+                <div id="loginForm">
+                    <h2 class="text-2xl font-semibold mb-4">Sign In</h2>
+                    <input type="email" id="email" placeholder="Email" class="w-full p-3 rounded-lg bg-white/10 border border-white/20 mb-4 text-white placeholder-gray-400">
+                    <input type="password" id="password" placeholder="Password" class="w-full p-3 rounded-lg bg-white/10 border border-white/20 mb-4 text-white placeholder-gray-400">
+                    <button onclick="signIn()" class="w-full bg-indigo-600 hover:bg-indigo-700 py-3 rounded-lg font-semibold transition">Sign In</button>
+                    <button onclick="signUp()" class="w-full mt-2 bg-purple-600 hover:bg-purple-700 py-3 rounded-lg font-semibold transition">Create Account</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main App -->
+        <div id="mainApp" class="hidden">
+            <!-- Header -->
+            <header class="glass-effect rounded-xl p-6 mb-8">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center space-x-4">
+                        <h1 class="text-3xl font-bold">🦉 StudyTrack Pro</h1>
+                        <div class="flex space-x-2">
+                            <span class="px-3 py-1 bg-yellow-500/20 rounded-full text-yellow-300">🔥 <span id="streakCount">0</span> day streak</span>
+                            <span class="px-3 py-1 bg-green-500/20 rounded-full text-green-300">📈 Share: <span id="sharePrice">0</span></span>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <span id="userEmail" class="text-sm text-gray-300"></span>
+                        <button onclick="signOut()" class="px-4 py-2 bg-red-600/20 hover:bg-red-600/30 rounded-lg transition">Sign Out</button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Navigation Tabs -->
+            <div class="glass-effect rounded-xl p-2 mb-8 flex space-x-2">
+                <button onclick="switchView('dashboard')" class="tab-btn flex-1 py-3 px-4 rounded-lg transition hover:bg-white/10" data-view="dashboard">📊 Dashboard</button>
+                <button onclick="switchView('timer')" class="tab-btn flex-1 py-3 px-4 rounded-lg transition hover:bg-white/10" data-view="timer">⏱️ Timer</button>
+                <button onclick="switchView('sessions')" class="tab-btn flex-1 py-3 px-4 rounded-lg transition hover:bg-white/10" data-view="sessions">📝 Sessions</button>
+                <button onclick="switchView('courses')" class="tab-btn flex-1 py-3 px-4 rounded-lg transition hover:bg-white/10" data-view="courses">📚 Courses</button>
+                <button onclick="switchView('spaced')" class="tab-btn flex-1 py-3 px-4 rounded-lg transition hover:bg-white/10" data-view="spaced">🧠 Spaced Review</button>
+                <button onclick="switchView('analytics')" class="tab-btn flex-1 py-3 px-4 rounded-lg transition hover:bg-white/10" data-view="analytics">📈 Analytics</button>
+            </div>
+
+            <!-- Dashboard View -->
+            <div id="dashboard" class="view">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <!-- Progress Pills -->
+                    <div class="glass-effect rounded-xl p-6">
+                        <h3 class="text-lg font-semibold mb-4">Daily Progress</h3>
+                        <div class="relative h-4 bg-white/10 rounded-full overflow-hidden">
+                            <div id="dailyProgress" class="absolute left-0 top-0 h-full bg-gradient-to-r from-green-400 to-green-600 rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                        <p class="mt-2 text-sm"><span id="dailyTime">0</span> / <span id="dailyGoal">180</span> min</p>
+                    </div>
+                    
+                    <div class="glass-effect rounded-xl p-6">
+                        <h3 class="text-lg font-semibold mb-4">Weekly Progress</h3>
+                        <div class="relative h-4 bg-white/10 rounded-full overflow-hidden">
+                            <div id="weeklyProgress" class="absolute left-0 top-0 h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                        <p class="mt-2 text-sm"><span id="weeklyTime">0</span> / <span id="weeklyGoal">1260</span> min</p>
+                    </div>
+                    
+                    <div class="glass-effect rounded-xl p-6">
+                        <h3 class="text-lg font-semibold mb-4">Monthly Progress</h3>
+                        <div class="relative h-4 bg-white/10 rounded-full overflow-hidden">
+                            <div id="monthlyProgress" class="absolute left-0 top-0 h-full bg-gradient-to-r from-purple-400 to-purple-600 rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                        <p class="mt-2 text-sm"><span id="monthlyTime">0</span> / <span id="monthlyGoal">5400</span> min</p>
+                    </div>
+                </div>
+
+                <!-- Medals -->
+                <div class="glass-effect rounded-xl p-6 mb-8">
+                    <h3 class="text-xl font-semibold mb-4">🏆 Medal Standings</h3>
+                    <div class="grid grid-cols-3 gap-4">
+                        <div class="text-center">
+                            <div class="text-4xl mb-2">🥇</div>
+                            <p class="text-2xl font-bold" id="goldCount">0</p>
+                            <p class="text-sm text-gray-300">Gold (>5h)</p>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-4xl mb-2">🥈</div>
+                            <p class="text-2xl font-bold" id="silverCount">0</p>
+                            <p class="text-sm text-gray-300">Silver (>4h)</p>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-4xl mb-2">🥉</div>
+                            <p class="text-2xl font-bold" id="bronzeCount">0</p>
+                            <p class="text-sm text-gray-300">Bronze (>3h)</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Today's Schedule -->
+                <div class="glass-effect rounded-xl p-6">
+                    <h3 class="text-xl font-semibold mb-4">📅 Today's Schedule</h3>
+                    <div id="todaySchedule" class="space-y-2">
+                        <p class="text-gray-400">No sessions scheduled for today</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Timer View -->
+            <div id="timer" class="view hidden">
+                <div class="max-w-2xl mx-auto">
+                    <div class="glass-effect rounded-xl p-8 text-center">
+                        <h2 class="text-2xl font-semibold mb-6">Study Timer</h2>
+                        
+                        <!-- Course Selection -->
+                        <div class="mb-6">
+                            <label class="block text-sm mb-2">Select Course:</label>
+                            <select id="timerCourse" class="w-full p-3 rounded-lg bg-white/10 border border-white/20 text-white">
+                                <option value="">Select a course...</option>
+                            </select>
+                        </div>
+
+                        <!-- Topic Selection for Spaced Repetition -->
+                        <div class="mb-6">
+                            <label class="block text-sm mb-2">Topic (for spaced repetition):</label>
+                            <input type="text" id="timerTopic" placeholder="Enter topic name..." class="w-full p-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-gray-400">
+                        </div>
+
+                        <!-- Timer Display -->
+                        <div class="text-6xl font-bold mb-8 font-mono" id="timerDisplay">00:00:00</div>
+                        
+                        <!-- Timer Controls -->
+                        <div class="flex justify-center space-x-4 mb-6">
+                            <button onclick="startTimer()" id="startBtn" class="px-8 py-3 bg-green-600 hover:bg-green-700 rounded-lg font-semibold transition">Start</button>
+                            <button onclick="pauseTimer()" id="pauseBtn" class="px-8 py-3 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-semibold transition hidden">Pause</button>
+                            <button onclick="stopTimer()" id="stopBtn" class="px-8 py-3 bg-red-600 hover:bg-red-700 rounded-lg font-semibold transition hidden">Stop</button>
+                        </div>
+
+                        <!-- Pomodoro Settings -->
+                        <div class="text-sm text-gray-300">
+                            <label class="flex items-center justify-center space-x-2">
+                                <input type="checkbox" id="pomodoroMode" class="rounded">
+                                <span>Pomodoro Mode (25 min sessions)</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sessions View -->
+            <div id="sessions" class="view hidden">
+                <div class="glass-effect rounded-xl p-6">
+                    <h2 class="text-2xl font-semibold mb-6">Study Sessions</h2>
+                    <div id="sessionsList" class="space-y-3">
+                        <p class="text-gray-400">No sessions recorded yet</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Courses View -->
+            <div id="courses" class="view hidden">
+                <div class="glass-effect rounded-xl p-6 mb-6">
+                    <h2 class="text-2xl font-semibold mb-4">Manage Courses</h2>
+                    <div class="flex space-x-4 mb-6">
+                        <input type="text" id="courseName" placeholder="Course name" class="flex-1 p-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-gray-400">
+                        <input type="color" id="courseColor" class="w-20 h-12 rounded-lg bg-white/10 border border-white/20">
+                        <button onclick="addCourse()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-semibold transition">Add Course</button>
+                    </div>
+                    <div id="coursesList" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <p class="text-gray-400">No courses added yet</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Spaced Repetition View -->
+            <div id="spaced" class="view hidden">
+                <div class="glass-effect rounded-xl p-6 mb-6">
+                    <h2 class="text-2xl font-semibold mb-4">🧠 Spaced Repetition Schedule</h2>
+                    <p class="text-gray-300 mb-6">Topics are scheduled for review at optimal intervals: 1 day, 3 days, 7 days, 14 days, and 30 days after initial study.</p>
+                    
+                    <div class="mb-8">
+                        <h3 class="text-xl font-semibold mb-4">📋 Today's Reviews</h3>
+                        <div id="todayReviews" class="space-y-3">
+                            <p class="text-gray-400">No reviews scheduled for today</p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="text-xl font-semibold mb-4">📅 Upcoming Reviews</h3>
+                        <div id="upcomingReviews" class="space-y-3">
+                            <p class="text-gray-400">No upcoming reviews</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analytics View -->
+            <div id="analytics" class="view hidden">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="glass-effect rounded-xl p-6">
+                        <h3 class="text-xl font-semibold mb-4">Study Time by Course</h3>
+                        <canvas id="courseChart"></canvas>
+                    </div>
+                    <div class="glass-effect rounded-xl p-6">
+                        <h3 class="text-xl font-semibold mb-4">Weekly Study Pattern</h3>
+                        <canvas id="weekChart"></canvas>
+                    </div>
+                    <div class="glass-effect rounded-xl p-6">
+                        <h3 class="text-xl font-semibold mb-4">Study Streak Calendar</h3>
+                        <div id="streakCalendar" class="grid grid-cols-7 gap-2">
+                            <!-- Calendar will be populated here -->
+                        </div>
+                    </div>
+                    <div class="glass-effect rounded-xl p-6">
+                        <h3 class="text-xl font-semibold mb-4">Statistics</h3>
+                        <div class="space-y-3">
+                            <div class="flex justify-between">
+                                <span>Total Study Time:</span>
+                                <span id="totalStudyTime">0h 0m</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>Average Daily:</span>
+                                <span id="avgDailyTime">0h 0m</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>Most Productive Day:</span>
+                                <span id="mostProductiveDay">-</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>Topics Mastered:</span>
+                                <span id="topicsMastered">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase Configuration - Replace with your own config
+        const firebaseConfig = {
+            apiKey: "AIzaSyDEMPLE-KEY",
+            authDomain: "studytrack-demo.firebaseapp.com",
+            projectId: "studytrack-demo",
+            storageBucket: "studytrack-demo.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "1:123456789:web:abcdef123456"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        // Global Variables
+        let currentUser = null;
+        let timerInterval = null;
+        let timerSeconds = 0;
+        let timerStartTime = null;
+        let currentTimerCourse = null;
+        let currentTimerTopic = null;
+        let isPaused = false;
+
+        // Spaced Repetition Intervals (in days)
+        const SPACED_INTERVALS = [1, 3, 7, 14, 30];
+
+        // Authentication
+        auth.onAuthStateChanged((user) => {
+            document.getElementById('loading').classList.add('hidden');
+            if (user) {
+                currentUser = user;
+                document.getElementById('auth').classList.add('hidden');
+                document.getElementById('mainApp').classList.remove('hidden');
+                document.getElementById('userEmail').textContent = user.email;
+                initializeApp();
+            } else {
+                document.getElementById('auth').classList.remove('hidden');
+                document.getElementById('mainApp').classList.add('hidden');
+            }
+        });
+
+        function signIn() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            auth.signInWithEmailAndPassword(email, password)
+                .catch((error) => alert('Sign in failed: ' + error.message));
+        }
+
+        function signUp() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            auth.createUserWithEmailAndPassword(email, password)
+                .then(() => initializeUserData())
+                .catch((error) => alert('Sign up failed: ' + error.message));
+        }
+
+        function signOut() {
+            auth.signOut();
+        }
+
+        function initializeUserData() {
+            if (!currentUser) return;
+            
+            const userDoc = db.collection('users').doc(currentUser.uid);
+            userDoc.set({
+                email: currentUser.email,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                settings: {
+                    dailyGoal: 180,
+                    weeklyGoal: 1260,
+                    monthlyGoal: 5400,
+                    medalThresholds: {
+                        gold: 300,
+                        silver: 240,
+                        bronze: 180
+                    }
+                },
+                stats: {
+                    currentStreak: 0,
+                    sharePrice: 0,
+                    medals: { gold: 0, silver: 0, bronze: 0 }
+                }
+            }, { merge: true });
+        }
+
+        function initializeApp() {
+            loadUserData();
+            loadCourses();
+            loadSessions();
+            loadSpacedReviews();
+            updateAnalytics();
+            switchView('dashboard');
+        }
+
+        function switchView(viewName) {
+            document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
+            document.getElementById(viewName).classList.remove('hidden');
+            
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('bg-white/20');
+                if (btn.dataset.view === viewName) {
+                    btn.classList.add('bg-white/20');
+                }
+            });
+
+            if (viewName === 'analytics') {
+                updateAnalytics();
+            }
+        }
+
+        async function loadUserData() {
+            if (!currentUser) return;
+            
+            const userDoc = await db.collection('users').doc(currentUser.uid).get();
+            if (userDoc.exists) {
+                const data = userDoc.data();
+                document.getElementById('streakCount').textContent = data.stats?.currentStreak || 0;
+                document.getElementById('sharePrice').textContent = data.stats?.sharePrice || 0;
+                document.getElementById('goldCount').textContent = data.stats?.medals?.gold || 0;
+                document.getElementById('silverCount').textContent = data.stats?.medals?.silver || 0;
+                document.getElementById('bronzeCount').textContent = data.stats?.medals?.bronze || 0;
+                
+                // Update progress bars
+                updateProgressBars();
+            }
+        }
+
+        async function updateProgressBars() {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            const sessions = await db.collection('users').doc(currentUser.uid)
+                .collection('sessions')
+                .where('date', '>=', today)
+                .get();
+            
+            let dailyMinutes = 0;
+            sessions.forEach(doc => {
+                dailyMinutes += doc.data().duration || 0;
+            });
+            
+            document.getElementById('dailyTime').textContent = dailyMinutes;
+            document.getElementById('dailyProgress').style.width = Math.min((dailyMinutes / 180) * 100, 100) + '%';
+            
+            // Weekly progress
+            const weekStart = new Date(today);
+            weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+            const weekSessions = await db.collection('users').doc(currentUser.uid)
+                .collection('sessions')
+                .where('date', '>=', weekStart)
+                .get();
+            
+            let weeklyMinutes = 0;
+            weekSessions.forEach(doc => {
+                weeklyMinutes += doc.data().duration || 0;
+            });
+            
+            document.getElementById('weeklyTime').textContent = weeklyMinutes;
+            document.getElementById('weeklyProgress').style.width = Math.min((weeklyMinutes / 1260) * 100, 100) + '%';
+            
+            // Check for medals
+            checkAndAwardMedals(dailyMinutes);
+            
+            // Update share price
+            updateSharePrice(dailyMinutes);
+        }
+
+        async function checkAndAwardMedals(dailyMinutes) {
+            const userRef = db.collection('users').doc(currentUser.uid);
+            const userDoc = await userRef.get();
+            const settings = userDoc.data()?.settings || {};
+            const stats = userDoc.data()?.stats || {};
+            
+            let medalAwarded = null;
+            if (dailyMinutes >= (settings.medalThresholds?.gold || 300)) {
+                medalAwarded = 'gold';
+            } else if (dailyMinutes >= (settings.medalThresholds?.silver || 240)) {
+                medalAwarded = 'silver';
+            } else if (dailyMinutes >= (settings.medalThresholds?.bronze || 180)) {
+                medalAwarded = 'bronze';
+            }
+            
+            if (medalAwarded) {
+                const today = new Date().toDateString();
+                const medalRef = userRef.collection('medals').doc(today);
+                const medalDoc = await medalRef.get();
+                
+                if (!medalDoc.exists) {
+                    await medalRef.set({
+                        type: medalAwarded,
+                        date: new Date(),
+                        minutes: dailyMinutes
+                    });
+                    
+                    // Update medal count
+                    const newCount = (stats.medals?.[medalAwarded] || 0) + 1;
+                    await userRef.update({
+                        [`stats.medals.${medalAwarded}`]: newCount
+                    });
+                    
+                    document.getElementById(`${medalAwarded}Count`).textContent = newCount;
+                }
+            }
+        }
+
+        async function updateSharePrice(dailyMinutes) {
+            const userRef = db.collection('users').doc(currentUser.uid);
+            const userDoc = await userRef.get();
+            const settings = userDoc.data()?.settings || {};
+            const stats = userDoc.data()?.stats || {};
+            
+            const dailyGoal = settings.dailyGoal || 180;
+            const difference = dailyMinutes - dailyGoal;
+            const newSharePrice = (stats.sharePrice || 0) + difference;
+            
+            await userRef.update({
+                'stats.sharePrice': newSharePrice
+            });
+            
+            document.getElementById('sharePrice').textContent = newSharePrice;
+        }
+
+        // Timer Functions
+        function startTimer() {
+            const course = document.getElementById('timerCourse').value;
+            const topic = document.getElementById('timerTopic').value;
+            
+            if (!course) {
+                alert('Please select a course first');
+                return;
+            }
+            
+            currentTimerCourse = course;
+            currentTimerTopic = topic;
+            timerStartTime = new Date();
+            isPaused = false;
+            
+            document.getElementById('startBtn').classList.add('hidden');
+            document.getElementById('pauseBtn').classList.remove('hidden');
+            document.getElementById('stopBtn').classList.remove('hidden');
+            
+            timerInterval = setInterval(updateTimer, 1000);
+            
+            // Pomodoro mode
+            if (document.getElementById('pomodoroMode').checked) {
+                setTimeout(() => {
+                    if (!isPaused && timerInterval) {
+                        alert('Pomodoro session complete! Take a 5-minute break.');
+                        pauseTimer();
+                    }
+                }, 25 * 60 * 1000);
+            }
+        }
+
+        function updateTimer() {
+            if (!isPaused) {
+                timerSeconds++;
+                const hours = Math.floor(timerSeconds / 3600);
+                const minutes = Math.floor((timerSeconds % 3600) / 60);
+                const seconds = timerSeconds % 60;
+                document.getElementById('timerDisplay').textContent = 
+                    `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            }
+        }
+
+        function pauseTimer() {
+            isPaused = !isPaused;
+            document.getElementById('pauseBtn').textContent = isPaused ? 'Resume' : 'Pause';
+            document.getElementById('pauseBtn').classList.toggle('bg-yellow-600');
+            document.getElementById('pauseBtn').classList.toggle('bg-green-600');
+        }
+
+        async function stopTimer() {
+            if (timerSeconds < 60) {
+                alert('Session too short to save (minimum 1 minute)');
+            } else {
+                await saveSession();
+            }
+            
+            clearInterval(timerInterval);
+            timerInterval = null;
+            timerSeconds = 0;
+            document.getElementById('timerDisplay').textContent = '00:00:00';
+            document.getElementById('startBtn').classList.remove('hidden');
+            document.getElementById('pauseBtn').classList.add('hidden');
+            document.getElementById('stopBtn').classList.add('hidden');
+            isPaused = false;
+        }
+
+        async function saveSession() {
+            const duration = Math.floor(timerSeconds / 60); // Convert to minutes
+            
+            const sessionData = {
+                course: currentTimerCourse,
+                topic: currentTimerTopic || '',
+                duration: duration,
+                date: timerStartTime,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            
+            // Save session
+            await db.collection('users').doc(currentUser.uid)
+                .collection('sessions').add(sessionData);
+            
+            // If topic exists, create spaced repetition schedule
+            if (currentTimerTopic) {
+                await createSpacedRepetitionSchedule(currentTimerTopic, currentTimerCourse);
+            }
+            
+            // Update streak
+            await updateStreak();
+            
+            // Reload data
+            loadSessions();
+            updateProgressBars();
+            loadSpacedReviews();
+        }
+
+        async function createSpacedRepetitionSchedule(topic, course) {
+            const today = new Date();
+            
+            for (let i = 0; i < SPACED_INTERVALS.length; i++) {
+                const reviewDate = new Date(today);
+                reviewDate.setDate(reviewDate.getDate() + SPACED_INTERVALS[i]);
+                reviewDate.setHours(0, 0, 0, 0);
+                
+                await db.collection('users').doc(currentUser.uid)
+                    .collection('spacedReviews').add({
+                        topic: topic,
+                        course: course,
+                        reviewDate: reviewDate,
+                        reviewNumber: i + 1,
+                        completed: false,
+                        createdAt: today
+                    });
+            }
+        }
+
+        async function updateStreak() {
+            const userRef = db.collection('users').doc(currentUser.uid);
+            const userDoc = await userRef.get();
+            const stats = userDoc.data()?.stats || {};
+            
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            
+            const yesterdaySessions = await db.collection('users').doc(currentUser.uid)
+                .collection('sessions')
+                .where('date', '>=', yesterday)
+                .where('date', '<', today)
+                .get();
+            
+            let newStreak = 1;
+            if (!yesterdaySessions.empty) {
+                newStreak = (stats.currentStreak || 0) + 1;
+            }
+            
+            await userRef.update({
+                'stats.currentStreak': newStreak,
+                'stats.lastStudyDate': today
+            });
+            
+            document.getElementById('streakCount').textContent = newStreak;
+        }
+
+        // Courses Management
+        async function addCourse() {
+            const name = document.getElementById('courseName').value;
+            const color = document.getElementById('courseColor').value;
+            
+            if (!name) return;
+            
+            await db.collection('users').doc(currentUser.uid)
+                .collection('courses').add({
+                    name: name,
+                    color: color,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            
+            document.getElementById('courseName').value = '';
+            loadCourses();
+        }
+
+        async function loadCourses() {
+            if (!currentUser) return;
+            
+            const courses = await db.collection('users').doc(currentUser.uid)
+                .collection('courses').get();
+            
+            const coursesList = document.getElementById('coursesList');
+            const timerCourseSelect = document.getElementById('timerCourse');
+            
+            if (courses.empty) {
+                coursesList.innerHTML = '<p class="text-gray-400">No courses added yet</p>';
+                timerCourseSelect.innerHTML = '<option value="">No courses available</option>';
+            } else {
+                coursesList.innerHTML = '';
+                timerCourseSelect.innerHTML = '<option value="">Select a course...</option>';
+                
+                courses.forEach(doc => {
+                    const course = doc.data();
+                    
+                    // Add to courses list
+                    const courseDiv = document.createElement('div');
+                    courseDiv.className = 'p-4 rounded-lg border-2 flex items-center justify-between';
+                    courseDiv.style.borderColor = course.color;
+                    courseDiv.style.backgroundColor = course.color + '20';
+                    courseDiv.innerHTML = `
+                        <div class="flex items-center space-x-3">
+                            <div class="w-4 h-4 rounded-full" style="background-color: ${course.color}"></div>
+                            <span class="font-semibold">${course.name}</span>
+                        </div>
+                        <button onclick="deleteCourse('${doc.id}')" class="text-red-400 hover:text-red-300">Delete</button>
+                    `;
+                    coursesList.appendChild(courseDiv);
+                    
+                    // Add to timer select
+                    const option = document.createElement('option');
+                    option.value = course.name;
+                    option.textContent = course.name;
+                    timerCourseSelect.appendChild(option);
+                });
+            }
+        }
+
+        async function deleteCourse(courseId) {
+            if (confirm('Are you sure you want to delete this course?')) {
+                await db.collection('users').doc(currentUser.uid)
+                    .collection('courses').doc(courseId).delete();
+                loadCourses();
+            }
+        }
+
+        async function loadSessions() {
+            if (!currentUser) return;
+            
+            const sessions = await db.collection('users').doc(currentUser.uid)
+                .collection('sessions')
+                .orderBy('date', 'desc')
+                .limit(20)
+                .get();
+            
+            const sessionsList = document.getElementById('sessionsList');
+            
+            if (sessions.empty) {
+                sessionsList.innerHTML = '<p class="text-gray-400">No sessions recorded yet</p>';
+            } else {
+                sessionsList.innerHTML = '';
+                sessions.forEach(doc => {
+                    const session = doc.data();
+                    const date = session.date?.toDate ? session.date.toDate() : new Date();
+                    
+                    const sessionDiv = document.createElement('div');
+                    sessionDiv.className = 'p-4 bg-white/5 rounded-lg flex justify-between items-center';
+                    sessionDiv.innerHTML = `
+                        <div>
+                            <p class="font-semibold">${session.course}</p>
+                            ${session.topic ? `<p class="text-sm text-gray-400">Topic: ${session.topic}</p>` : ''}
+                            <p class="text-sm text-gray-400">${date.toLocaleDateString()} ${date.toLocaleTimeString()}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xl font-bold">${session.duration} min</p>
+                            <button onclick="deleteSession('${doc.id}')" class="text-red-400 hover:text-red-300 text-sm">Delete</button>
+                        </div>
+                    `;
+                    sessionsList.appendChild(sessionDiv);
+                });
+            }
+        }
+
+        async function deleteSession(sessionId) {
+            if (confirm('Are you sure you want to delete this session?')) {
+                await db.collection('users').doc(currentUser.uid)
+                    .collection('sessions').doc(sessionId).delete();
+                loadSessions();
+                updateProgressBars();
+            }
+        }
+
+        async function loadSpacedReviews() {
+            if (!currentUser) return;
+            
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            
+            // Today's reviews
+            const todayReviews = await db.collection('users').doc(currentUser.uid)
+                .collection('spacedReviews')
+                .where('reviewDate', '>=', today)
+                .where('reviewDate', '<', tomorrow)
+                .where('completed', '==', false)
+                .get();
+            
+            const todayReviewsDiv = document.getElementById('todayReviews');
+            const todayScheduleDiv = document.getElementById('todaySchedule');
+            
+            if (todayReviews.empty) {
+                todayReviewsDiv.innerHTML = '<p class="text-gray-400">No reviews scheduled for today</p>';
+                todayScheduleDiv.innerHTML = '<p class="text-gray-400">No reviews scheduled for today</p>';
+            } else {
+                todayReviewsDiv.innerHTML = '';
+                todayScheduleDiv.innerHTML = '<h4 class="font-semibold mb-2">Spaced Reviews Due:</h4>';
+                
+                todayReviews.forEach(doc => {
+                    const review = doc.data();
+                    const reviewDiv = document.createElement('div');
+                    reviewDiv.className = 'p-4 bg-white/5 rounded-lg flex justify-between items-center';
+                    reviewDiv.innerHTML = `
+                        <div>
+                            <p class="font-semibold">${review.topic}</p>
+                            <p class="text-sm text-gray-400">${review.course} - Review #${review.reviewNumber}</p>
+                        </div>
+                        <button onclick="markReviewComplete('${doc.id}')" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm">Mark Complete</button>
+                    `;
+                    todayReviewsDiv.appendChild(reviewDiv);
+                    
+                    // Also add to dashboard
+                    const scheduleItem = document.createElement('div');
+                    scheduleItem.className = 'p-2 bg-yellow-500/20 rounded-lg';
+                    scheduleItem.innerHTML = `📚 Review: ${review.topic} (${review.course})`;
+                    todayScheduleDiv.appendChild(scheduleItem);
+                });
+            }
+            
+            // Upcoming reviews
+            const upcomingReviews = await db.collection('users').doc(currentUser.uid)
+                .collection('spacedReviews')
+                .where('reviewDate', '>', tomorrow)
+                .where('completed', '==', false)
+                .orderBy('reviewDate')
+                .limit(10)
+                .get();
+            
+            const upcomingReviewsDiv = document.getElementById('upcomingReviews');
+            
+            if (upcomingReviews.empty) {
+                upcomingReviewsDiv.innerHTML = '<p class="text-gray-400">No upcoming reviews</p>';
+            } else {
+                upcomingReviewsDiv.innerHTML = '';
+                upcomingReviews.forEach(doc => {
+                    const review = doc.data();
+                    const reviewDate = review.reviewDate.toDate();
+                    const daysUntil = Math.ceil((reviewDate - today) / (1000 * 60 * 60 * 24));
+                    
+                    const reviewDiv = document.createElement('div');
+                    reviewDiv.className = 'p-4 bg-white/5 rounded-lg';
+                    reviewDiv.innerHTML = `
+                        <div>
+                            <p class="font-semibold">${review.topic}</p>
+                            <p class="text-sm text-gray-400">${review.course} - Review #${review.reviewNumber}</p>
+                            <p class="text-sm text-gray-400">Due in ${daysUntil} day${daysUntil > 1 ? 's' : ''} (${reviewDate.toLocaleDateString()})</p>
+                        </div>
+                    `;
+                    upcomingReviewsDiv.appendChild(reviewDiv);
+                });
+            }
+        }
+
+        async function markReviewComplete(reviewId) {
+            await db.collection('users').doc(currentUser.uid)
+                .collection('spacedReviews').doc(reviewId)
+                .update({ completed: true });
+            
+            loadSpacedReviews();
+        }
+
+        async function updateAnalytics() {
+            if (!currentUser) return;
+            
+            // Get all sessions
+            const sessions = await db.collection('users').doc(currentUser.uid)
+                .collection('sessions').get();
+            
+            let totalMinutes = 0;
+            const courseData = {};
+            const dayData = { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0 };
+            const dailyData = {};
+            
+            sessions.forEach(doc => {
+                const session = doc.data();
+                totalMinutes += session.duration || 0;
+                
+                // Course breakdown
+                courseData[session.course] = (courseData[session.course] || 0) + session.duration;
+                
+                // Day of week breakdown
+                const date = session.date?.toDate ? session.date.toDate() : new Date();
+                const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][date.getDay()];
+                dayData[dayName] += session.duration;
+                
+                // Daily data for streak calendar
+                const dateKey = date.toDateString();
+                dailyData[dateKey] = (dailyData[dateKey] || 0) + session.duration;
+            });
+            
+            // Update statistics
+            const hours = Math.floor(totalMinutes / 60);
+            const mins = totalMinutes % 60;
+            document.getElementById('totalStudyTime').textContent = `${hours}h ${mins}m`;
+            
+            const daysStudied = Object.keys(dailyData).length || 1;
+            const avgDaily = Math.floor(totalMinutes / daysStudied);
+            document.getElementById('avgDailyTime').textContent = `${Math.floor(avgDaily / 60)}h ${avgDaily % 60}m`;
+            
+            // Most productive day
+            let maxDay = 'Mon';
+            let maxMinutes = 0;
+            Object.entries(dayData).forEach(([day, minutes]) => {
+                if (minutes > maxMinutes) {
+                    maxDay = day;
+                    maxMinutes = minutes;
+                }
+            });
+            document.getElementById('mostProductiveDay').textContent = maxDay;
+            
+            // Topics mastered (completed all 5 reviews)
+            const completedReviews = await db.collection('users').doc(currentUser.uid)
+                .collection('spacedReviews')
+                .where('completed', '==', true)
+                .where('reviewNumber', '==', 5)
+                .get();
+            document.getElementById('topicsMastered').textContent = completedReviews.size;
+            
+            // Update charts
+            updateCharts(courseData, dayData, dailyData);
+        }
+
+        function updateCharts(courseData, dayData, dailyData) {
+            // Course Chart
+            const courseCtx = document.getElementById('courseChart')?.getContext('2d');
+            if (courseCtx) {
+                new Chart(courseCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: Object.keys(courseData),
+                        datasets: [{
+                            data: Object.values(courseData),
+                            backgroundColor: [
+                                '#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6'
+                            ]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                labels: { color: '#fff' }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Week Chart
+            const weekCtx = document.getElementById('weekChart')?.getContext('2d');
+            if (weekCtx) {
+                new Chart(weekCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: Object.keys(dayData),
+                        datasets: [{
+                            label: 'Study Time (minutes)',
+                            data: Object.values(dayData),
+                            backgroundColor: '#6366f1'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                labels: { color: '#fff' }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                ticks: { color: '#fff' },
+                                grid: { color: '#ffffff20' }
+                            },
+                            x: {
+                                ticks: { color: '#fff' },
+                                grid: { color: '#ffffff20' }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Streak Calendar
+            const calendar = document.getElementById('streakCalendar');
+            if (calendar) {
+                calendar.innerHTML = '';
+                
+                // Last 30 days
+                for (let i = 29; i >= 0; i--) {
+                    const date = new Date();
+                    date.setDate(date.getDate() - i);
+                    const dateKey = date.toDateString();
+                    const minutes = dailyData[dateKey] || 0;
+                    
+                    const dayDiv = document.createElement('div');
+                    dayDiv.className = 'aspect-square rounded';
+                    
+                    if (minutes === 0) {
+                        dayDiv.className += ' bg-gray-700';
+                    } else if (minutes < 60) {
+                        dayDiv.className += ' bg-green-900';
+                    } else if (minutes < 180) {
+                        dayDiv.className += ' bg-green-700';
+                    } else if (minutes < 300) {
+                        dayDiv.className += ' bg-green-500';
+                    } else {
+                        dayDiv.className += ' bg-green-300';
+                    }
+                    
+                    dayDiv.title = `${date.toLocaleDateString()}: ${minutes} min`;
+                    calendar.appendChild(dayDiv);
+                }
+            }
+        }
+
+        // Initialize on load
+        window.addEventListener('load', () => {
+            // Show loading state initially
+            document.getElementById('loading').classList.remove('hidden');
+        });
+    </script>
+</body>
+</html>
